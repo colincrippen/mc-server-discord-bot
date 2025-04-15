@@ -30,12 +30,12 @@ class MCServer:
     def __init__(self) -> None:
         self.process: Optional[Process] = None
         self.state: ServerState = "off"
+        self._started_event = asyncio.Event()
         self._shutdown_event = asyncio.Event()
 
-    async def start(self) -> None:
+    async def start(self) -> str:
         if os.path.exists(PID_FILE):
-            print("server already running")
-            return
+            return "Server already running!"
 
         self.process = await asyncio.create_subprocess_exec(
             *JAVA_COMMAND,
@@ -53,6 +53,8 @@ class MCServer:
         print(f"Server started with PID {self.process.pid}.")
 
         asyncio.create_task(self._read_output())  # noqa: RUF006
+        await self._started_event.wait()
+        return "Server is ready!"
 
     async def _read_output(self) -> None:
         while self.state != "off":
@@ -63,6 +65,7 @@ class MCServer:
 
                 if "Loading Xaero's World Map - Stage 2/2 (Server)" in line_str:
                     self.state = "running"
+                    self._started_event.set()
                     await self.send_command("say Server is online!")
 
                 if self.state == "stopping" and "Stopped IO worker!" in line_str:
@@ -75,17 +78,13 @@ class MCServer:
             self.process.stdin.write((command + "\n").encode())
             await self.process.stdin.drain()
 
-    async def stop(self, time: int = 15):
-        if not self.process:
-            print("No server running.")
-            return
-
+    async def stop(self, time: int = 15) -> str:
+        if not self.process or self.state == "off":
+            return "No server running."
         if self.state == "starting":
-            print("cannot stop until fully started")
-            return
+            return "Cannot stop until fully started"
         elif self.state == "stopping":
-            print("already trying to stop!")
-            return
+            return "Already trying to stop!"
 
         self.state = "stopping"
 
@@ -105,9 +104,12 @@ class MCServer:
             print("SIGINT error:", e)
 
         self.state = "off"
+        self.process = None
 
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
+
+        return "Server has fully shut down!"
 
 
 # async def main():
