@@ -4,29 +4,35 @@ import arc
 import hikari
 from dotenv import load_dotenv
 
+from .server_manager import MCServer
+
 load_dotenv()
 
 
 bot = hikari.GatewayBot(os.getenv("TOKEN", ""))
 client = arc.GatewayClient(bot)
 
-client.load_extensions_from("./src/extensions")
+server = MCServer()
+client.set_type_dependency(MCServer, server)
+
+# client.load_extensions_from("./src/extensions")
+client.load_extension("src.extensions.start_server")
 
 
-all_extensions = [
-    "src.extensions." + filename[:-3] for filename in os.listdir("./src/extensions") if filename.endswith(".py")
-]
+# all_extensions = [
+#     "src.extensions." + filename[:-3] for filename in os.listdir("./src/extensions") if filename.endswith(".py")
+# ]
 
 
-@client.include
-@arc.slash_command("reload", "Reload all extensions")
-async def reload_extensions(ctx: arc.GatewayContext) -> None:
-    for extension in all_extensions:
-        client.unload_extension(extension)
-        client.load_extension(extension)
+# @client.include
+# @arc.slash_command("reload", "Reload all extensions")
+# async def reload_extensions(ctx: arc.GatewayContext) -> None:
+#     for extension in all_extensions:
+#         client.unload_extension(extension)
+#         client.load_extension(extension)
 
-    await client.resync_commands()
-    await ctx.respond("Extensions reloaded!")
+#     await client.resync_commands()
+#     await ctx.respond("Extensions reloaded!")
 
 
 @client.include
