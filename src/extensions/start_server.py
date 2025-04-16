@@ -40,7 +40,7 @@ async def send_command(
 
 
 @plugin.include
-@arc.slash_command("get_players", "retrieves the number of players")
+@arc.slash_command("get_players", "Retrieves the number of players")
 async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     await ctx.respond("Fetching player list...")
     response = await server.get_online_players()

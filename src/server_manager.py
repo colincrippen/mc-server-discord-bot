@@ -23,7 +23,7 @@ JAVA_COMMAND = [
     "-Dlog4j2.formatMsgNoLookups=true",
     "-jar",
     "fabric-server-launcher.jar",
-    # "-nogui",
+    "-nogui",
 ]
 
 SHUTDOWN_PATTERN = re.compile(r"^\[\d{2}:\d{2}:\d{2}\] \[Server thread\/INFO\]: Stopped IO worker!$")
@@ -59,6 +59,7 @@ class MCServer:
             return "No server is running!"
 
         try:
+            await asyncio.sleep(2)  # a bit of delay to add a bit more of a buffer
             os.killpg(self.process.pid, signal.SIGINT)
         except ProcessLookupError:
             print("Process already exited.")
@@ -68,6 +69,8 @@ class MCServer:
         self.state = "off"
         self.process = None
         self._shutdown_event.clear()
+
+        self.output_queue = asyncio.Queue()
 
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
@@ -134,7 +137,7 @@ class MCServer:
     async def send_command(self, command: str) -> str | None:
         if self.state == "off":
             return "The server isn't running!"
-        
+
         if self.process and self.process.stdin:
             print(f"Sending command: {command}")
             self.process.stdin.write((command + "\n").encode())
