@@ -1,3 +1,6 @@
+import json
+
+import aiofiles
 import arc
 
 from ..server_manager import MCServer
@@ -41,12 +44,17 @@ async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
     if "error" in response:
         await ctx.edit_initial_response(f"Error: {response['error']}")
     else:
+        user_map: dict[str, int]
+        async with aiofiles.open("src/user_map.json", "r") as file:
+            user_map = json.loads(await file.read())
+
         players = response["players"]
+        player_strs = [f"{player} (<@{user_map[player]}>)" if player in user_map else player for player in players]
         num_players = len(players)
         response_str = (
             "There are no players currently online."
             if num_players == 0
-            else f"{num_players} online: {', '.join(players)}"
+            else f"{num_players} online: {', '.join(player_strs)}"
         )
 
         await ctx.edit_initial_response(response_str, user_mentions=False)
