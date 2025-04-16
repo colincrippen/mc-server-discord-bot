@@ -111,6 +111,14 @@ class MCServer:
             case "stopping":
                 return "Already trying to stop!"
 
+        response = await self.get_online_players()
+        if "error" in response:
+            return f"Error: {response['error']}"
+
+        players = response["players"]
+        if len(players) > 0:
+            return "Can't stop the server because people are currently online!"
+
         self.state = "stopping"
 
         await self.send_command("stop")
@@ -123,13 +131,19 @@ class MCServer:
 
         return await self._handle_shutdown()
 
-    async def send_command(self, command: str):
+    async def send_command(self, command: str) -> str | None:
+        if self.state == "off":
+            return "The server isn't running!"
+        
         if self.process and self.process.stdin:
             print(f"Sending command: {command}")
             self.process.stdin.write((command + "\n").encode())
             await self.process.stdin.drain()
 
     async def get_online_players(self) -> dict[str, str | list[str]]:
+        if self.state != "running":
+            return {"error": "The server isn't running!"}
+
         await self.send_command("list")
 
         try:

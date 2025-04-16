@@ -32,8 +32,11 @@ async def send_command(
     server: MCServer = arc.inject(),
 ) -> None:
     await ctx.respond("Attempting to send command...")
-    await server.send_command(my_command)
-    await ctx.edit_initial_response("Command sent!")
+    response = await server.send_command(my_command)
+    if response:
+        await ctx.edit_initial_response(response)
+    else:
+        await ctx.edit_initial_response("Command sent!")
 
 
 @plugin.include
@@ -42,7 +45,7 @@ async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
     await ctx.respond("Fetching player list...")
     response = await server.get_online_players()
     if "error" in response:
-        await ctx.edit_initial_response(f"Error: {response['error']}")
+        await ctx.edit_initial_response(response["error"])
     else:
         user_map: dict[str, int]
         async with aiofiles.open("src/user_map.json", "r") as file:
