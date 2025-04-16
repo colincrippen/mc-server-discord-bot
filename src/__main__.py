@@ -36,9 +36,13 @@ client.load_extension("src.extensions.start_server")
 
 
 @client.include
-@arc.slash_command("hello")
-async def hello(ctx: arc.GatewayContext) -> None:
-    await ctx.respond("Hello!")
+@arc.slash_command("reload")
+async def reload(ctx: arc.GatewayContext) -> None:
+    client.unload_extension("src.extensions.start_server")
+    client.load_extension("src.extensions.start_server")
+
+    await client.resync_commands()
+    await ctx.respond("reloaded")
 
 
 if __name__ == "__main__":

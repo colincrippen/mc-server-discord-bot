@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import signal
 import typing
 from typing import Literal, Optional
@@ -22,16 +23,77 @@ JAVA_COMMAND = [
     "-Dlog4j2.formatMsgNoLookups=true",
     "-jar",
     "fabric-server-launcher.jar",
-    "-nogui",
+    # "-nogui",
 ]
+
+SHUTDOWN_PATTERN = re.compile(r"^\[\d{2}:\d{2}:\d{2}\] \[Server thread\/INFO\]: Stopped IO worker!$")
+LIST_PATTERN = re.compile(r"There (?:are|is) (\d+) of a max of \d+ players online: ?(.*)")
 
 
 class MCServer:
     def __init__(self) -> None:
         self.process: Optional[Process] = None
         self.state: ServerState = "off"
+        self.output_queue = asyncio.Queue()
+
         self._started_event = asyncio.Event()
         self._shutdown_event = asyncio.Event()
+
+    async def _read_output(self) -> None:
+        while self.state != "off":
+            line_bytes = await self.process.stdout.readline()  # type: ignore
+            if line_bytes:
+                line_str = line_bytes.decode().strip()
+                print(line_str)
+
+                await self.output_queue.put(line_str)
+
+                if "Loading Xaero's World Map - Stage 2/2 (Server)" in line_str:
+                    self.state = "running"
+                    self._started_event.set()
+                    await self.send_command("say Server is online!")
+
+                if SHUTDOWN_PATTERN.match(line_str):
+                    if self.state != "stopping":
+                        self.state = "stopping"
+                        await self._handle_shutdown()
+                    else:
+                        self._shutdown_event.set()
+
+    async def _handle_shutdown(self) -> str:
+        if self.process is None:
+            return "No server is running!"
+
+        try:
+            os.killpg(self.process.pid, signal.SIGINT)
+        except ProcessLookupError:
+            print("Process already exited.")
+        except Exception as e:
+            print("SIGINT error:", e)
+
+        self.state = "off"
+        self.process = None
+        self._shutdown_event.clear()
+
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+
+        return "Server has fully shut down!"
+
+    async def get_online_players(self) -> dict[str, str | list[str]]:
+        await self.send_command("list")
+
+        try:
+            while True:
+                line = await asyncio.wait_for(self.output_queue.get(), timeout=5)
+
+                match = LIST_PATTERN.search(line)
+                if match:
+                    names = match.group(2).split(", ") if match.group(2) else []
+                    return {"players": names}
+
+        except asyncio.TimeoutError:
+            return {"error": "Timed out waiting for /list"}
 
     async def start(self) -> str:
         if os.path.exists(PID_FILE):
@@ -54,23 +116,8 @@ class MCServer:
 
         asyncio.create_task(self._read_output())  # noqa: RUF006
         await self._started_event.wait()
+        self._started_event.clear()
         return "Server is ready!"
-
-    async def _read_output(self) -> None:
-        while self.state != "off":
-            line_bytes = await self.process.stdout.readline()  # type: ignore
-            if line_bytes:
-                line_str = line_bytes.decode().strip()
-                print(line_str)
-
-                if "Loading Xaero's World Map - Stage 2/2 (Server)" in line_str:
-                    self.state = "running"
-                    self._started_event.set()
-                    await self.send_command("say Server is online!")
-
-                if self.state == "stopping" and "Stopped IO worker!" in line_str:
-                    print("Detected shutdown complete message.")
-                    self._shutdown_event.set()
 
     async def send_command(self, command: str):
         if self.process and self.process.stdin:
@@ -79,12 +126,13 @@ class MCServer:
             await self.process.stdin.drain()
 
     async def stop(self, time: int = 15) -> str:
-        if not self.process or self.state == "off":
-            return "No server running."
-        if self.state == "starting":
-            return "Cannot stop until fully started"
-        elif self.state == "stopping":
-            return "Already trying to stop!"
+        match self.state:
+            case "off":
+                return "No server running."
+            case "starting":
+                return "Cannot stop until fully started."
+            case "stopping":
+                return "Already trying to stop!"
 
         self.state = "stopping"
 
@@ -96,20 +144,7 @@ class MCServer:
         except asyncio.TimeoutError:
             print("Shutdown timeout. Sending SIGINT.")
 
-        try:
-            os.killpg(self.process.pid, signal.SIGINT)
-        except ProcessLookupError:
-            print("Process already exited.")
-        except Exception as e:
-            print("SIGINT error:", e)
-
-        self.state = "off"
-        self.process = None
-
-        if os.path.exists(PID_FILE):
-            os.remove(PID_FILE)
-
-        return "Server has fully shut down!"
+        return await self._handle_shutdown()
 
 
 # async def main():

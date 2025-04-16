@@ -6,11 +6,6 @@ plugin = arc.GatewayPlugin("start_server")
 
 
 @plugin.include
-@arc.slash_command("times_two")
-async def times_two(ctx: arc.GatewayContext, num: arc.Option[int, arc.IntParams("give me an integer")]) -> None:
-    await ctx.respond(f"{num} times 3 is {num * 3}")
-
-@plugin.include
 @arc.slash_command("start", "Starts the server")
 async def start_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     await ctx.respond("Attempting to start the server...")
@@ -24,6 +19,38 @@ async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
     await ctx.respond("Attempting to stop the server...")
     response: str = await server.stop()
     await ctx.edit_initial_response(response)
+
+
+@plugin.include
+@arc.slash_command("send_command", "sends a command")
+async def send_command(
+    ctx: arc.GatewayContext,
+    my_command: arc.Option[str, arc.StrParams("command pleaseeee")],
+    server: MCServer = arc.inject(),
+) -> None:
+    await ctx.respond("Attempting to send command...")
+    await server.send_command(my_command)
+    await ctx.edit_initial_response("Command sent!")
+
+
+@plugin.include
+@arc.slash_command("get_players", "retrieves the number of players")
+async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
+    await ctx.respond("Fetching player list...")
+    response = await server.get_online_players()
+    if "error" in response:
+        await ctx.edit_initial_response(f"Error: {response['error']}")
+    else:
+        players = response["players"]
+        num_players = len(players)
+        response_str = (
+            "There are no players currently online."
+            if num_players == 0
+            else f"{num_players} online: {', '.join(players)}"
+        )
+
+        await ctx.edit_initial_response(response_str, user_mentions=False)
+
 
 @arc.loader
 def loader(client: arc.GatewayClient) -> None:
