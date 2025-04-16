@@ -34,9 +34,8 @@ class MCServer:
     def __init__(self) -> None:
         self.process: Optional[Process] = None
         self.state: ServerState = "off"
-        self.output_queue = asyncio.Queue()
+        self.output_queue: asyncio.Queue[str] = asyncio.Queue()
 
-        self._started_event = asyncio.Event()
         self._shutdown_event = asyncio.Event()
 
     async def _read_output(self) -> None:
@@ -44,14 +43,9 @@ class MCServer:
             line_bytes = await self.process.stdout.readline()  # type: ignore
             if line_bytes:
                 line_str = line_bytes.decode().strip()
+
                 print(line_str)
-
                 await self.output_queue.put(line_str)
-
-                if "Loading Xaero's World Map - Stage 2/2 (Server)" in line_str:
-                    self.state = "running"
-                    self._started_event.set()
-                    await self.send_command("say Server is online!")
 
                 if SHUTDOWN_PATTERN.match(line_str):
                     if self.state != "stopping":
@@ -80,21 +74,6 @@ class MCServer:
 
         return "Server has fully shut down!"
 
-    async def get_online_players(self) -> dict[str, str | list[str]]:
-        await self.send_command("list")
-
-        try:
-            while True:
-                line = await asyncio.wait_for(self.output_queue.get(), timeout=5)
-
-                match = LIST_PATTERN.search(line)
-                if match:
-                    names = match.group(2).split(", ") if match.group(2) else []
-                    return {"players": names}
-
-        except asyncio.TimeoutError:
-            return {"error": "Timed out waiting for /list"}
-
     async def start(self) -> str:
         if os.path.exists(PID_FILE):
             return "Server already running!"
@@ -115,15 +94,13 @@ class MCServer:
         print(f"Server started with PID {self.process.pid}.")
 
         asyncio.create_task(self._read_output())  # noqa: RUF006
-        await self._started_event.wait()
-        self._started_event.clear()
-        return "Server is ready!"
 
-    async def send_command(self, command: str):
-        if self.process and self.process.stdin:
-            print(f"Sending command: {command}")
-            self.process.stdin.write((command + "\n").encode())
-            await self.process.stdin.drain()
+        while self.state == "starting":
+            line = await asyncio.wait_for(self.output_queue.get(), timeout=None)
+            if "Loading Xaero's World Map - Stage 2/2 (Server)" in line:
+                self.state = "running"
+
+        return "Server is ready!"
 
     async def stop(self, time: int = 15) -> str:
         match self.state:
@@ -146,14 +123,23 @@ class MCServer:
 
         return await self._handle_shutdown()
 
+    async def send_command(self, command: str):
+        if self.process and self.process.stdin:
+            print(f"Sending command: {command}")
+            self.process.stdin.write((command + "\n").encode())
+            await self.process.stdin.drain()
 
-# async def main():
-#     server = MCServer()
+    async def get_online_players(self) -> dict[str, str | list[str]]:
+        await self.send_command("list")
 
-#     await server.start()
-#     await asyncio.sleep(45)
-#     await server.stop()
+        try:
+            while True:
+                line = await asyncio.wait_for(self.output_queue.get(), timeout=5)
 
+                match = LIST_PATTERN.search(line)
+                if match:
+                    names = match.group(2).split(", ") if match.group(2) else []
+                    return {"players": names}
 
-# if __name__ == "__main__":
-#     asyncio.run(main())
+        except asyncio.TimeoutError:
+            return {"error": "Timed out waiting for /list"}
