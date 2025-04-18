@@ -6,14 +6,16 @@ import typing
 from typing import Literal, Optional
 
 import aiofiles
+from dotenv import find_dotenv, load_dotenv
 
 if typing.TYPE_CHECKING:
     from asyncio.subprocess import Process
 
 type ServerState = Literal["off", "starting", "running", "stopping"]
 
+load_dotenv(find_dotenv())
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SERVER_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../test_server_dir/server"))
+SERVER_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, os.getenv("SERVER_DIR", "../../../server")))
 PID_FILE = os.path.join(SERVER_DIR, "server.pid")
 
 JAVA_COMMAND = [

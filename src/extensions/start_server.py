@@ -2,41 +2,55 @@ import json
 
 import aiofiles
 import arc
+import hikari
 
-from ..server_manager import MCServer
+from ..util.server_manager import MCServer
 
 plugin = arc.GatewayPlugin("start_server")
+
+
+def activity(name: str) -> hikari.Activity:
+    return hikari.Activity(name=name, type=hikari.ActivityType.CUSTOM)
+
+
+@plugin.listen()
+async def set_status(event: hikari.StartedEvent) -> None:
+    await plugin.client.app.update_presence(activity=activity("😴 The server is offline."))
 
 
 @plugin.include
 @arc.slash_command("start", "Starts the server")
 async def start_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     await ctx.respond("Attempting to start the server...")
+    await ctx.client.app.update_presence(activity=activity("🛠️ The server is starting up..."))
     response: str = await server.start()
     await ctx.edit_initial_response(response)
+    await ctx.client.app.update_presence(activity=activity("⚡️ The server is online!"))
 
 
 @plugin.include
 @arc.slash_command("stop", "Closes the server")
 async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     await ctx.respond("Attempting to stop the server...")
+    await ctx.client.app.update_presence(activity=activity("🛠️ The server is shutting down..."))
     response: str = await server.stop()
     await ctx.edit_initial_response(response)
+    await ctx.client.app.update_presence(activity=activity("😴 The server is offline."))
 
 
-@plugin.include
-@arc.slash_command("send_command", "sends a command")
-async def send_command(
-    ctx: arc.GatewayContext,
-    my_command: arc.Option[str, arc.StrParams("command pleaseeee")],
-    server: MCServer = arc.inject(),
-) -> None:
-    await ctx.respond("Attempting to send command...")
-    response = await server.send_command(my_command)
-    if response:
-        await ctx.edit_initial_response(response)
-    else:
-        await ctx.edit_initial_response("Command sent!")
+# @plugin.include
+# @arc.slash_command("send_command", "sends a command")
+# async def send_command(
+#     ctx: arc.GatewayContext,
+#     my_command: arc.Option[str, arc.StrParams("command pleaseeee")],
+#     server: MCServer = arc.inject(),
+# ) -> None:
+#     await ctx.respond("Attempting to send command...")
+#     response = await server.send_command(my_command)
+#     if response:
+#         await ctx.edit_initial_response(response)
+#     else:
+#         await ctx.edit_initial_response("Command sent!")
 
 
 @plugin.include

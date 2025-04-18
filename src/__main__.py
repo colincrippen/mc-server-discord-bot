@@ -4,7 +4,7 @@ import arc
 import hikari
 from dotenv import load_dotenv
 
-from .server_manager import MCServer
+from .util.server_manager import MCServer
 
 load_dotenv()
 
@@ -19,14 +19,14 @@ client.set_type_dependency(MCServer, server)
 client.load_extension("src.extensions.start_server")
 
 
-@client.include
-@arc.slash_command("reload")
-async def reload(ctx: arc.GatewayContext) -> None:
-    client.unload_extension("src.extensions.start_server")
-    client.load_extension("src.extensions.start_server")
+# @client.include
+# @arc.slash_command("reload")
+# async def reload(ctx: arc.GatewayContext) -> None:
+#     client.unload_extension("src.extensions.start_server")
+#     client.load_extension("src.extensions.start_server")
 
-    await client.resync_commands()
-    await ctx.respond("reloaded")
+#     await client.resync_commands()
+#     await ctx.respond("reloaded")
 
 
 if __name__ == "__main__":
