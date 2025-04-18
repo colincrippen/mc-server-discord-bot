@@ -23,8 +23,12 @@ async def set_status(event: hikari.StartedEvent) -> None:
 async def start_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     await ctx.respond("Attempting to start the server...")
     await ctx.client.app.update_presence(activity=activity("🛠️ The server is starting up..."))
-    response: str = await server.start()
-    await ctx.edit_initial_response(response)
+    response = await server.start()
+    await ctx.edit_initial_response(response["msg"])
+    
+    if response.get("success"):
+        await ctx.respond(f"<@{ctx.user.id}>", user_mentions=True)  
+
     await ctx.client.app.update_presence(activity=activity("⚡️ The server is online!"))
 
 

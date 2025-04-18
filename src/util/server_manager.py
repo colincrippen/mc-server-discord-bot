@@ -79,9 +79,9 @@ class MCServer:
 
         return "Server has fully shut down!"
 
-    async def start(self) -> str:
+    async def start(self) -> dict[str, str | bool]:
         if os.path.exists(PID_FILE):
-            return "Server already running!"
+            return {"success": False, "msg": "Server already running!"}
 
         self.process = await asyncio.create_subprocess_exec(
             *JAVA_COMMAND,
@@ -105,7 +105,7 @@ class MCServer:
             if "Loading Xaero's World Map - Stage 2/2 (Server)" in line:
                 self.state = "running"
 
-        return "Server is ready!"
+        return {"success": True, "msg": "The server is ready!"}
 
     async def stop(self, time: int = 15) -> str:
         match self.state:
