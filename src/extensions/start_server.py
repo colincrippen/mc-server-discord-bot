@@ -14,7 +14,7 @@ def activity(name: str) -> hikari.Activity:
 
 
 @plugin.listen()
-async def set_status(event: hikari.StartedEvent) -> None:
+async def set_status(event: arc.StartedEvent) -> None:
     await plugin.client.app.update_presence(activity=activity("😴 The server is offline."))
 
 
@@ -25,9 +25,9 @@ async def start_server(ctx: arc.GatewayContext, server: MCServer = arc.inject())
     await ctx.client.app.update_presence(activity=activity("🛠️ The server is starting up..."))
     response = await server.start()
     await ctx.edit_initial_response(response["msg"])
-    
+
     if response.get("success"):
-        await ctx.respond(f"<@{ctx.user.id}>", user_mentions=True)  
+        await ctx.respond(f"<@{ctx.user.id}>", user_mentions=True)
 
     await ctx.client.app.update_presence(activity=activity("⚡️ The server is online!"))
 
