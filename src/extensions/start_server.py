@@ -16,8 +16,45 @@ def activity(name: str) -> hikari.Activity:
     return hikari.Activity(name=name, type=hikari.ActivityType.CUSTOM)
 
 
+async def update_description(desc: str) -> str | None:
+    target_url = "https://discord.com/api/v10/applications/@me"
+    data = {"description": desc}
+    headers = {
+        "Authorization": f"Bot {os.getenv('TOKEN', '')}",
+        "Content-Type": "application/json",
+        "User-Agent": _HTTP_USER_AGENT,
+    }
+
+    async with aiohttp.ClientSession() as session:  # noqa: SIM117
+        async with session.patch(target_url, json=data, headers=headers) as response:
+            data = await response.json()
+            if "errors" in data:
+                return f"Error:\n{json.dumps(data, indent=2)}"
+
+
+@arc.utils.interval_loop(seconds=10)
+async def update_players_if_different(client: arc.GatewayClient) -> None:
+    players: list[str]
+    async with aiofiles.open("src/online_players.json", "r") as file:
+        players = json.loads(await file.read())
+        print(f"{players=}")
+
+    new_desc = "Players online: " + ", ".join(players)
+
+    if client.application and client.application.description != new_desc:
+        response = await update_description(new_desc)
+        if response:
+            print(response)
+            return
+
+        client.application.description = new_desc
+        print("updated description!!!!!")
+    else:
+        print("descriptions are the same!")
+
+
 @plugin.listen()
-async def set_status(event: arc.StartedEvent) -> None:
+async def startup(event: arc.StartedEvent) -> None:
     await plugin.client.app.update_presence(activity=activity("😴 The server is offline."))
 
 
