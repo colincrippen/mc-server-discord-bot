@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import re
 import signal
@@ -64,13 +63,10 @@ class MCServer:
                     else:
                         self._shutdown_event.set()
 
-                elif join_match or leave_match:
-                    if join_match:
-                        self.players.add(join_match.group(1))
-                    elif leave_match:
-                        self.players.discard(leave_match.group(1))
-
-                    await self._write_players_to_file()
+                elif join_match:
+                    self.players.add(join_match.group(1))
+                elif leave_match:
+                    self.players.discard(leave_match.group(1))
 
     async def _handle_shutdown(self) -> str:
         if self.process is None:
@@ -90,16 +86,11 @@ class MCServer:
         self.players.clear()
 
         self.output_queue = asyncio.Queue()
-        await self._write_players_to_file()
 
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
 
         return "Server has fully shut down!"
-
-    async def _write_players_to_file(self) -> None:
-        async with aiofiles.open("src/online_players.json", "w") as file:
-            await file.write(json.dumps(list(self.players)))
 
     async def start(self) -> dict[str, str | bool]:
         if os.path.exists(PID_FILE):

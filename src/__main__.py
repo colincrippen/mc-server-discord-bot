@@ -21,15 +21,16 @@ client.load_extension("src.extensions.start_server")
 
 
 @client.add_startup_hook
-async def startup(client: arc.GatewayClient) -> None:
-    await update_description("")
-    update_players_if_different.start(client)
+@client.inject_dependencies
+async def startup(client: arc.GatewayClient, server: MCServer = arc.inject()) -> None:
+    await update_description("🛌🛌🛌")
+    update_players_if_different.start(client, server)
 
 
 @client.add_shutdown_hook
 async def shutdown(client: arc.GatewayClient) -> None:
     update_players_if_different.stop()
-    await update_description("")
+    await update_description("🛌🛌🛌")
 
 
 # @client.include
