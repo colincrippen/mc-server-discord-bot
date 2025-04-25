@@ -1,8 +1,11 @@
 import json
+import os
 
 import aiofiles
+import aiohttp
 import arc
 import hikari
+from hikari.impl.rest import _HTTP_USER_AGENT
 
 from ..util.server_manager import MCServer
 
@@ -30,6 +33,28 @@ async def start_server(ctx: arc.GatewayContext, server: MCServer = arc.inject())
         await ctx.respond(f"<@{ctx.user.id}>", user_mentions=True)
 
     await ctx.client.app.update_presence(activity=activity("⚡️ The server is online!"))
+
+
+@plugin.include
+@arc.slash_command("change_description")
+async def change_description(ctx: arc.GatewayContext, desc: arc.Option[str, arc.StrParams()]) -> None:
+    """This is hacky and stupid. Do not do this."""
+    target_url = "https://discord.com/api/v10/applications/@me"
+    data = {"description": desc}
+    headers = {
+        "Authorization": f"Bot {os.getenv('TOKEN', '')}",
+        "Content-Type": "application/json",
+        "User-Agent": _HTTP_USER_AGENT,
+    }
+
+    async with aiohttp.ClientSession() as session:  # noqa: SIM117
+        async with session.patch(target_url, json=data, headers=headers) as response:
+            data = await response.json()
+            if "errors" in data:
+                await ctx.respond(f"❌ Error: ```json\n{json.dumps(data, indent=2)}```")
+                return
+
+    await ctx.respond(f"Changed description to {desc}")
 
 
 @plugin.include
