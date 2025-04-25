@@ -177,3 +177,5 @@ cython_debug/
 test_server_dir/
 
 user_map.json
+
+online_players.json

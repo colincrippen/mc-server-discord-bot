@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import re
 import signal
@@ -31,12 +32,16 @@ JAVA_COMMAND = [
 SHUTDOWN_PATTERN = re.compile(r"^\[\d{2}:\d{2}:\d{2}\] \[Server thread\/INFO\]: Stopped IO worker!$")
 LIST_PATTERN = re.compile(r"There (?:are|is) (\d+) of a max of \d+ players online: ?(.*)")
 
+JOIN_PATTERN = re.compile(r"^\[\d{2}:\d{2}:\d{2}\] \[Server thread\/INFO\]: (.*) joined the game$")
+LEAVE_PATTERN = re.compile(r"^\[\d{2}:\d{2}:\d{2}\] \[Server thread\/INFO\]: (.*) left the game$")
+
 
 class MCServer:
     def __init__(self) -> None:
         self.process: Optional[Process] = None
         self.state: ServerState = "off"
         self.output_queue: asyncio.Queue[str] = asyncio.Queue()
+        self.players: set[str] = set()
 
         self._shutdown_event = asyncio.Event()
 
@@ -49,12 +54,24 @@ class MCServer:
                 print(line_str)
                 await self.output_queue.put(line_str)
 
+                join_match = JOIN_PATTERN.match(line_str)
+                leave_match = LEAVE_PATTERN.match(line_str)
+
                 if SHUTDOWN_PATTERN.match(line_str):
                     if self.state != "stopping":
                         self.state = "stopping"
                         await self._handle_shutdown()
                     else:
                         self._shutdown_event.set()
+
+                elif join_match or leave_match:
+                    async with aiofiles.open("src/online_players.json", "w") as file:
+                        if join_match:
+                            self.players.add(join_match.group(1))
+                        elif leave_match:
+                            self.players.discard(leave_match.group(1))
+
+                        await file.write(json.dumps(list(self.players)))
 
     async def _handle_shutdown(self) -> str:
         if self.process is None:
@@ -71,6 +88,7 @@ class MCServer:
         self.state = "off"
         self.process = None
         self._shutdown_event.clear()
+        self.players.clear()
 
         self.output_queue = asyncio.Queue()
 
