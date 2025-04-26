@@ -5,7 +5,6 @@ import aiofiles
 import aiohttp
 import arc
 import hikari
-import hikari.components
 from hikari.impl.rest import _HTTP_USER_AGENT
 
 from ..util.server_manager import MCServer
@@ -133,46 +132,50 @@ async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
 @plugin.include
 @arc.slash_command("get_players_v2", "harder better faster stronger")
 async def get_players_v2(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
-    components = [
-        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#EFB8B8")).add_component(
-            hikari.impl.SectionComponentBuilder(
-                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/neoholic")
-            )
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# neoholic"))
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@442777167089369097>"))
-        ),
-        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#E9C344")).add_component(
-            hikari.impl.SectionComponentBuilder(
-                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/Colterson")
-            )
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# Colterson"))
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@322897506965127168>"))
-        ),
-        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#B9364D")).add_component(
-            hikari.impl.SectionComponentBuilder(
-                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/saucyhands1")
-            )
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# saucyhands1"))
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@322897506965127168>"))
-        ),
-        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#EFB8B8")).add_component(
-            hikari.impl.SectionComponentBuilder(
-                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/neoholic")
-            )
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# neoholic"))
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@442777167089369097>"))
-        ),
-        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#E9C344")).add_component(
-            hikari.impl.SectionComponentBuilder(
-                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/Colterson")
-            )
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# Colterson"))
-            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@322897506965127168>"))
-        ),
-    ]
+    response = await server.get_online_players()
+    if "error" in response:
+        await ctx.respond(response["error"])
+        return
 
-    await ctx.respond(components=components)
-    await ctx.respond(components=components)
+    user_map: dict[str, int]
+    async with aiofiles.open("src/user_map.json", "r") as file:
+        user_map = json.loads(await file.read())
+
+    players: list[str] = response["players"]  # type: ignore
+    num_players = len(players)
+
+    if num_players == 0:
+        await ctx.respond(component=(hikari.impl.TextDisplayComponentBuilder(content="No players online.")))
+        return
+
+    player_batches = [players[:4]]
+    for i in range(4, num_players, 5):
+        player_batches.append(players[i : i + 5])
+
+    for index, batch in enumerate(player_batches):
+        components: list[hikari.api.ComponentBuilder] = []
+        if index == 0:
+            components.append(
+                hikari.impl.TextDisplayComponentBuilder(
+                    content=f"# {num_players} player{'s' if num_players > 1 else ''} online:"
+                )
+            )
+        for player in batch:
+            components.append(create_player_component(player, user_map.get(player)))
+
+        await ctx.respond(components=components)
+
+
+def create_player_component(username: str, id: int | None = None) -> hikari.impl.ContainerComponentBuilder:
+    return hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#FFFFFF")).add_component(
+        hikari.impl.SectionComponentBuilder(
+            accessory=hikari.impl.ThumbnailComponentBuilder(media=f"https://mc-heads.net/avatar/{username}")
+        )
+        .add_component(hikari.impl.TextDisplayComponentBuilder(content=f"## {username}"))
+        .add_component(
+            hikari.impl.TextDisplayComponentBuilder(content=f"<@{id}>" if id else "*idk their discord acc lol*")
+        )
+    )
 
 
 @arc.loader

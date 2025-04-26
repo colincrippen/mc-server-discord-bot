@@ -171,6 +171,7 @@ class MCServer:
                 match = LIST_PATTERN.search(line)
                 if match:
                     names = match.group(2).split(", ") if match.group(2) else []
+                    self.players = set(names)
                     return {"players": names}
 
         except asyncio.TimeoutError:
