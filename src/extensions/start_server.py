@@ -1,11 +1,14 @@
 import json
 import os
+from io import BytesIO
 
 import aiofiles
 import aiohttp
 import arc
 import hikari
+import numpy as np
 from hikari.impl.rest import _HTTP_USER_AGENT
+from PIL import Image
 
 from ..util.server_manager import MCServer
 
@@ -56,9 +59,6 @@ async def update_players_if_different(client: arc.GatewayClient, server: MCServe
             return
 
         client.application.description = new_desc
-        print("updated description!!!!!")
-    else:
-        print("descriptions are the same!")
 
 
 @plugin.listen()
@@ -105,33 +105,33 @@ async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
 #         await ctx.edit_initial_response("Command sent!")
 
 
+# @plugin.include
+# @arc.slash_command("get_players", "Retrieves the number of players")
+# async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
+#     await ctx.respond("Fetching player list...")
+#     response = await server.get_online_players()
+#     if "error" in response:
+#         await ctx.edit_initial_response(response["error"])
+#     else:
+#         user_map: dict[str, int]
+#         async with aiofiles.open("src/user_map.json", "r") as file:
+#             user_map = json.loads(await file.read())
+
+#         players = response["players"]
+#         player_strs = [f"{player} (<@{user_map[player]}>)" if player in user_map else player for player in players]
+#         num_players = len(players)
+#         response_str = (
+#             "There are no players currently online."
+#             if num_players == 0
+#             else f"{num_players} online: {', '.join(player_strs)}"
+#         )
+
+#         await ctx.edit_initial_response(response_str, user_mentions=False)
+
+
 @plugin.include
-@arc.slash_command("get_players", "Retrieves the number of players")
+@arc.slash_command("get_players", "Retrieves the current players online.")
 async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
-    await ctx.respond("Fetching player list...")
-    response = await server.get_online_players()
-    if "error" in response:
-        await ctx.edit_initial_response(response["error"])
-    else:
-        user_map: dict[str, int]
-        async with aiofiles.open("src/user_map.json", "r") as file:
-            user_map = json.loads(await file.read())
-
-        players = response["players"]
-        player_strs = [f"{player} (<@{user_map[player]}>)" if player in user_map else player for player in players]
-        num_players = len(players)
-        response_str = (
-            "There are no players currently online."
-            if num_players == 0
-            else f"{num_players} online: {', '.join(player_strs)}"
-        )
-
-        await ctx.edit_initial_response(response_str, user_mentions=False)
-
-
-@plugin.include
-@arc.slash_command("get_players_v2", "harder better faster stronger")
-async def get_players_v2(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     response = await server.get_online_players()
     if "error" in response:
         await ctx.respond(response["error"])
@@ -161,16 +161,24 @@ async def get_players_v2(ctx: arc.GatewayContext, server: MCServer = arc.inject(
                 )
             )
         for player in batch:
-            components.append(create_player_component(player, user_map.get(player)))
+            components.append(await create_player_component(player, user_map.get(player)))
 
         await ctx.respond(components=components)
 
 
-def create_player_component(username: str, id: int | None = None) -> hikari.impl.ContainerComponentBuilder:
-    return hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#FFFFFF")).add_component(
-        hikari.impl.SectionComponentBuilder(
-            accessory=hikari.impl.ThumbnailComponentBuilder(media=f"https://mc-heads.net/avatar/{username}")
-        )
+async def create_player_component(username: str, id: int | None = None) -> hikari.impl.ContainerComponentBuilder:
+    player_head_url: str = f"https://mc-heads.net/avatar/{username}"
+    color_tuple: tuple[int]
+    async with aiohttp.ClientSession() as session:  # noqa: SIM117
+        async with session.get(player_head_url) as response:
+            img_bytes = await response.read()
+            image = Image.open(BytesIO(img_bytes)).convert("RGB")
+            image_array = np.array(image)
+            average_color = image_array.mean(axis=(0, 1))
+            color_tuple = tuple(average_color.astype(int))
+
+    return hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_rgb(*color_tuple)).add_component(  # type: ignore
+        hikari.impl.SectionComponentBuilder(accessory=hikari.impl.ThumbnailComponentBuilder(media=player_head_url))
         .add_component(hikari.impl.TextDisplayComponentBuilder(content=f"## {username}"))
         .add_component(
             hikari.impl.TextDisplayComponentBuilder(content=f"<@{id}>" if id else "*idk their discord acc lol*")
