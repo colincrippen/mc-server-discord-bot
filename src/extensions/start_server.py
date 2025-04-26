@@ -5,6 +5,7 @@ import aiofiles
 import aiohttp
 import arc
 import hikari
+import hikari.components
 from hikari.impl.rest import _HTTP_USER_AGENT
 
 from ..util.server_manager import MCServer
@@ -127,6 +128,51 @@ async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
         )
 
         await ctx.edit_initial_response(response_str, user_mentions=False)
+
+
+@plugin.include
+@arc.slash_command("get_players_v2", "harder better faster stronger")
+async def get_players_v2(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
+    components = [
+        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#EFB8B8")).add_component(
+            hikari.impl.SectionComponentBuilder(
+                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/neoholic")
+            )
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# neoholic"))
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@442777167089369097>"))
+        ),
+        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#E9C344")).add_component(
+            hikari.impl.SectionComponentBuilder(
+                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/Colterson")
+            )
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# Colterson"))
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@322897506965127168>"))
+        ),
+        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#B9364D")).add_component(
+            hikari.impl.SectionComponentBuilder(
+                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/saucyhands1")
+            )
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# saucyhands1"))
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@322897506965127168>"))
+        ),
+        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#EFB8B8")).add_component(
+            hikari.impl.SectionComponentBuilder(
+                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/neoholic")
+            )
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# neoholic"))
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@442777167089369097>"))
+        ),
+        hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code("#E9C344")).add_component(
+            hikari.impl.SectionComponentBuilder(
+                accessory=hikari.impl.ThumbnailComponentBuilder(media="https://mc-heads.net/avatar/Colterson")
+            )
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="# Colterson"))
+            .add_component(hikari.impl.TextDisplayComponentBuilder(content="<@322897506965127168>"))
+        ),
+    ]
+
+    await ctx.respond(components=components)
+    await ctx.respond(components=components)
 
 
 @arc.loader
