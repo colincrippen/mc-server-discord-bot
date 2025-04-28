@@ -19,7 +19,7 @@ def activity(name: str) -> hikari.Activity:
     return hikari.Activity(name=name, type=hikari.ActivityType.CUSTOM)
 
 
-async def update_description(desc: str) -> str | None:
+async def update_description(desc: str, aiohttp_client: aiohttp.ClientSession) -> str | None:
     target_url = "https://discord.com/api/v10/applications/@me"
     data = {"description": desc}
     headers = {
@@ -28,15 +28,16 @@ async def update_description(desc: str) -> str | None:
         "User-Agent": _HTTP_USER_AGENT,
     }
 
-    async with aiohttp.ClientSession() as session:  # noqa: SIM117
-        async with session.patch(target_url, json=data, headers=headers) as response:
-            data = await response.json()
-            if "errors" in data:
-                return f"Error:\n{json.dumps(data, indent=2)}"
+    async with aiohttp_client.patch(target_url, json=data, headers=headers) as response:
+        data = await response.json()
+        if "errors" in data:
+            return f"Error:\n{json.dumps(data, indent=2)}"
 
 
 @arc.utils.interval_loop(seconds=30)
-async def update_players_if_different(client: arc.GatewayClient, server: MCServer) -> None:
+async def update_players_if_different(
+    client: arc.GatewayClient, server: MCServer, aiohttp_client: aiohttp.ClientSession
+) -> None:
     players = server.players
     new_desc = (
         (
@@ -53,7 +54,7 @@ async def update_players_if_different(client: arc.GatewayClient, server: MCServe
         and client.application
         and client.application.description != new_desc
     ):
-        response = await update_description(new_desc)
+        response = await update_description(new_desc, aiohttp_client)
         if response:
             print(response)
             return
@@ -131,7 +132,9 @@ async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
 
 @plugin.include
 @arc.slash_command("get_players", "Retrieves the current players online.")
-async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
+async def get_players(
+    ctx: arc.GatewayContext, server: MCServer = arc.inject(), aiohttp_client: aiohttp.ClientSession = arc.inject()
+) -> None:
     response = await server.get_online_players()
     if "error" in response:
         await ctx.respond(response["error"])
@@ -161,21 +164,22 @@ async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
                 )
             )
         for player in batch:
-            components.append(await create_player_component(player, user_map.get(player)))
+            components.append(await create_player_component(player, aiohttp_client, user_map.get(player)))
 
         await ctx.respond(components=components)
 
 
-async def create_player_component(username: str, id: int | None = None) -> hikari.impl.ContainerComponentBuilder:
+async def create_player_component(
+    username: str, aiohttp_client: aiohttp.ClientSession, id: int | None = None
+) -> hikari.impl.ContainerComponentBuilder:
     player_head_url: str = f"https://mc-heads.net/avatar/{username}"
     color_tuple: tuple[int]
-    async with aiohttp.ClientSession() as session:  # noqa: SIM117
-        async with session.get(player_head_url) as response:
-            img_bytes = await response.read()
-            image = Image.open(BytesIO(img_bytes)).convert("RGB")
-            image_array = np.array(image)
-            average_color = image_array.mean(axis=(0, 1))
-            color_tuple = tuple(average_color.astype(int))
+    async with aiohttp_client.get(player_head_url) as response:
+        img_bytes = await response.read()
+        image = Image.open(BytesIO(img_bytes)).convert("RGB")
+        image_array = np.array(image)
+        average_color = image_array.mean(axis=(0, 1))
+        color_tuple = tuple(average_color.astype(int))
 
     return hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_rgb(*color_tuple)).add_component(  # type: ignore
         hikari.impl.SectionComponentBuilder(accessory=hikari.impl.ThumbnailComponentBuilder(media=player_head_url))
