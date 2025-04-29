@@ -4,13 +4,14 @@ from io import BytesIO
 
 import aiofiles
 import aiohttp
+import aiosqlite
 import arc
 import hikari
 import numpy as np
 from hikari.impl.rest import _HTTP_USER_AGENT
 from PIL import Image
 
-from ..util.server_manager import MCServer
+from ..util.server_manager import SERVER_DIR, MCServer
 
 plugin = arc.GatewayPlugin("start_server")
 
@@ -167,6 +168,20 @@ async def get_players(
             components.append(await create_player_component(player, aiohttp_client, user_map.get(player)))
 
         await ctx.respond(components=components)
+
+
+@plugin.include
+@arc.slash_command("get_players_v2")
+async def get_players_v2(ctx: arc.GatewayContext, server: MCServer = arc.inject()):
+    db_path = f"{SERVER_DIR}/playerdata.db"
+
+    async with aiosqlite.connect(db_path) as db:  # noqa: SIM117
+        async with db.execute("SELECT * FROM player_info") as cursor:
+            async for row in cursor:
+                await ctx.respond(row)
+
+    
+
 
 
 async def create_player_component(
