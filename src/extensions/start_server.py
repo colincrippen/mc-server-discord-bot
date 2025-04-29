@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import textwrap
 import typing as t
 from dataclasses import dataclass
 from io import BytesIO
@@ -29,7 +30,6 @@ DB_PATH = f"{SERVER_DIR}/playerdata.db"
 
 @dataclass
 class Player:
-    id: int
     uuid: str
     username: str
     joined_at: str
@@ -197,8 +197,8 @@ async def create_player_component(aiohttp_client: aiohttp.ClientSession, player:
 
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(
-                "UPDATE player_info SET head_color = ?, head_color_hash = ? WHERE id = ?",
-                (player.head_color, new_hash, player.id),
+                "UPDATE player_info SET head_color = ?, head_color_hash = ? WHERE uuid = ?",
+                (player.head_color, new_hash, player.uuid),
             )
             await db.commit()
 
@@ -206,8 +206,12 @@ async def create_player_component(aiohttp_client: aiohttp.ClientSession, player:
         SectionComponentBuilder(accessory=ThumbnailComponentBuilder(media=player_head_url)).add_component(
             TextDisplayComponentBuilder(
                 content=(
-                    f"## {player.username}\n"
-                    + (f"<@{player.discord_id}>" if player.discord_id else "*idk their discord acc lol*")
+                    textwrap.dedent(f"""
+                        ## {player.username}
+                        {f"<@{player.discord_id}>" if player.discord_id else "*idk their discord acc lol*"}
+                        Online since: <t:{player.joined_at}:R>
+                        Deaths: `{player.deaths}`
+                    """)
                 )
             )
         )
