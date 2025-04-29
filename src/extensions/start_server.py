@@ -218,6 +218,20 @@ async def create_player_component(aiohttp_client: aiohttp.ClientSession, player:
     )
 
 
+@plugin.include
+@arc.slash_command("add_mc_username")
+async def add_mc_username(
+    ctx: arc.GatewayContext, username: arc.Option[str, arc.StrParams("Your minecraft username.")]
+) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = player_row_factory  # type: ignore
+        await db.execute("UPDATE player_info SET discord_id = NULL WHERE discord_id = ?", (ctx.author.id,))
+        await db.execute("UPDATE player_info SET discord_id = ? WHERE username = ?", (ctx.author.id, username))
+        await db.commit()
+
+    await ctx.respond("Updated username!")
+
+
 @arc.loader
 def loader(client: arc.GatewayClient) -> None:
     client.add_plugin(plugin)
