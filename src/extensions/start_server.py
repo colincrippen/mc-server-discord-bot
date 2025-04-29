@@ -1,10 +1,12 @@
 import json
 import os
+import typing as t
+from dataclasses import dataclass
 from io import BytesIO
 
-import aiofiles
 import aiohttp
 import aiosqlite
+import aiosqlite.cursor
 import arc
 import hikari
 import numpy as np
@@ -20,6 +22,22 @@ from PIL import Image
 from ..util.server_manager import SERVER_DIR, MCServer
 
 plugin = arc.GatewayPlugin("start_server")
+
+
+@dataclass
+class Player:
+    id: int
+    uuid: str
+    username: str
+    joined_at: str
+    currently_online: bool
+    deaths: int
+    discord_id: t.Optional[str]
+    head_avg_color: t.Optional[str]
+
+
+def player_row_factory(cursor: aiosqlite.cursor.Cursor, row: aiosqlite.Row) -> Player:
+    return Player(*row)
 
 
 def custom_activity(name: str) -> hikari.Activity:
@@ -113,82 +131,47 @@ async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
 #         await ctx.edit_initial_response("Command sent!")
 
 
-# @plugin.include
-# @arc.slash_command("get_players", "Retrieves the number of players")
-# async def get_players(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
-#     await ctx.respond("Fetching player list...")
-#     response = await server.get_online_players()
-#     if "error" in response:
-#         await ctx.edit_initial_response(response["error"])
-#     else:
-#         user_map: dict[str, int]
-#         async with aiofiles.open("src/user_map.json", "r") as file:
-#             user_map = json.loads(await file.read())
-
-#         players = response["players"]
-#         player_strs = [f"{player} (<@{user_map[player]}>)" if player in user_map else player for player in players]
-#         num_players = len(players)
-#         response_str = (
-#             "There are no players currently online."
-#             if num_players == 0
-#             else f"{num_players} online: {', '.join(player_strs)}"
-#         )
-
-#         await ctx.edit_initial_response(response_str, user_mentions=False)
-
-
 @plugin.include
-@arc.slash_command("get_players", "Retrieves the current players online.")
-async def get_players(
-    ctx: arc.GatewayContext, server: MCServer = arc.inject(), aiohttp_client: aiohttp.ClientSession = arc.inject()
-) -> None:
-    response = await server.get_online_players()
-    if "error" in response:
-        await ctx.respond(response["error"])
-        return
+@arc.slash_command("get_players")
+async def get_players(ctx: arc.GatewayContext, aiohttp_client: aiohttp.ClientSession = arc.inject()):
+    db_path = f"{SERVER_DIR}/playerdata.db"
+    players: list[Player] = []
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = player_row_factory  # type: ignore
+        async with db.execute("SELECT * FROM player_info WHERE currently_online = 1") as cursor:
+            async for player in cursor:
+                player = t.cast("Player", player)
+                players.append(player)
 
-    user_map: dict[str, int]
-    async with aiofiles.open("src/user_map.json", "r") as file:
-        user_map = json.loads(await file.read())
-
-    players: list[str] = response["players"]  # type: ignore
     num_players = len(players)
 
     if num_players == 0:
-        await ctx.respond(component=(TextDisplayComponentBuilder(content="No players online.")))
+        await ctx.respond("# No players online :frowning2:")
         return
 
-    player_batches = [players[:4]]
-    for i in range(4, num_players, 5):
-        player_batches.append(players[i : i + 5])
+    # each player group has 4 components. 30 % 4 == 7.
+    # this leaves two extra components for a header on each page
+    player_batches = [players[:7]]
+    for i in range(7, num_players, 7):
+        player_batches.append(players[i : i + 7])
 
     for index, batch in enumerate(player_batches):
-        components: list[hikari.api.ComponentBuilder] = []
-        if index == 0:
-            components.append(
-                TextDisplayComponentBuilder(content=f"# {num_players} player{'s' if num_players > 1 else ''} online:")
+        components: list[hikari.api.ComponentBuilder] = [
+            TextDisplayComponentBuilder(
+                content=(
+                    f"# {num_players} player{'s' if num_players > 1 else ''} online: "
+                    + (f"*(page {index + 1} of {len(player_batches)})*" if len(player_batches) > 1 else "")
+                )
             )
+        ]
         for player in batch:
-            components.append(await create_player_component(player, aiohttp_client, user_map.get(player)))
+            components.append(await create_player_component(aiohttp_client, player))
 
         await ctx.respond(components=components)
 
 
-@plugin.include
-@arc.slash_command("get_players_v2")
-async def get_players_v2(ctx: arc.GatewayContext, server: MCServer = arc.inject()):
-    db_path = f"{SERVER_DIR}/playerdata.db"
-
-    async with aiosqlite.connect(db_path) as db:  # noqa: SIM117
-        async with db.execute("SELECT * FROM player_info") as cursor:
-            async for row in cursor:
-                await ctx.respond(row)
-
-
-async def create_player_component(
-    username: str, aiohttp_client: aiohttp.ClientSession, id: int | None = None
-) -> ContainerComponentBuilder:
-    player_head_url: str = f"https://mc-heads.net/avatar/{username}"
+async def create_player_component(aiohttp_client: aiohttp.ClientSession, player: Player) -> ContainerComponentBuilder:
+    player_head_url: str = f"https://mc-heads.net/avatar/{player.uuid}"
     color_tuple: tuple[int]
     async with aiohttp_client.get(player_head_url) as response:
         img_bytes = await response.read()
@@ -198,9 +181,14 @@ async def create_player_component(
         color_tuple = tuple(average_color.astype(int))
 
     return ContainerComponentBuilder(accent_color=hikari.Color.from_rgb(*color_tuple)).add_component(  # type: ignore
-        SectionComponentBuilder(accessory=ThumbnailComponentBuilder(media=player_head_url))
-        .add_component(TextDisplayComponentBuilder(content=f"## {username}"))
-        .add_component(TextDisplayComponentBuilder(content=f"<@{id}>" if id else "*idk their discord acc lol*"))
+        SectionComponentBuilder(accessory=ThumbnailComponentBuilder(media=player_head_url)).add_component(
+            TextDisplayComponentBuilder(
+                content=(
+                    f"## {player.username}\n"
+                    + (f"<@{player.discord_id}>" if player.discord_id else "*idk their discord acc lol*")
+                )
+            )
+        )
     )
 
 
