@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import typing as t
@@ -23,6 +24,8 @@ from ..util.server_manager import SERVER_DIR, MCServer
 
 plugin = arc.GatewayPlugin("start_server")
 
+DB_PATH = f"{SERVER_DIR}/playerdata.db"
+
 
 @dataclass
 class Player:
@@ -33,7 +36,8 @@ class Player:
     currently_online: bool
     deaths: int
     discord_id: t.Optional[str]
-    head_avg_color: t.Optional[str]
+    head_color: t.Optional[str]
+    head_color_hash: t.Optional[str]
 
 
 def player_row_factory(cursor: aiosqlite.cursor.Cursor, row: aiosqlite.Row) -> Player:
@@ -133,10 +137,15 @@ async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
 
 @plugin.include
 @arc.slash_command("get_players")
-async def get_players(ctx: arc.GatewayContext, aiohttp_client: aiohttp.ClientSession = arc.inject()):
-    db_path = f"{SERVER_DIR}/playerdata.db"
+async def get_players(
+    ctx: arc.GatewayContext, server: MCServer = arc.inject(), aiohttp_client: aiohttp.ClientSession = arc.inject()
+):
+    if server.state != "running":
+        await ctx.respond("The server is offline.")
+        return
+
     players: list[Player] = []
-    async with aiosqlite.connect(db_path) as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = player_row_factory  # type: ignore
         async with db.execute("SELECT * FROM player_info WHERE currently_online = 1") as cursor:
             async for player in cursor:
@@ -172,15 +181,28 @@ async def get_players(ctx: arc.GatewayContext, aiohttp_client: aiohttp.ClientSes
 
 async def create_player_component(aiohttp_client: aiohttp.ClientSession, player: Player) -> ContainerComponentBuilder:
     player_head_url: str = f"https://mc-heads.net/avatar/{player.uuid}"
-    color_tuple: tuple[int]
+
     async with aiohttp_client.get(player_head_url) as response:
         img_bytes = await response.read()
+
+    new_hash = hashlib.sha256(img_bytes).hexdigest()
+
+    if not player.head_color or new_hash != player.head_color_hash:
         image = Image.open(BytesIO(img_bytes)).convert("RGB")
         image_array = np.array(image)
         average_color = image_array.mean(axis=(0, 1))
-        color_tuple = tuple(average_color.astype(int))
+        r, g, b = tuple(average_color.astype(int))
 
-    return ContainerComponentBuilder(accent_color=hikari.Color.from_rgb(*color_tuple)).add_component(  # type: ignore
+        player.head_color = hex(r * 16**4 + g * 16**2 + b)
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "UPDATE player_info SET head_color = ?, head_color_hash = ? WHERE id = ?",
+                (player.head_color, new_hash, player.id),
+            )
+            await db.commit()
+
+    return ContainerComponentBuilder(accent_color=hikari.Color.from_hex_code(player.head_color)).add_component(
         SectionComponentBuilder(accessory=ThumbnailComponentBuilder(media=player_head_url)).add_component(
             TextDisplayComponentBuilder(
                 content=(
