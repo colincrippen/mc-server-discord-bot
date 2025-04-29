@@ -8,6 +8,12 @@ import aiosqlite
 import arc
 import hikari
 import numpy as np
+from hikari.impl import (
+    ContainerComponentBuilder,
+    SectionComponentBuilder,
+    TextDisplayComponentBuilder,
+    ThumbnailComponentBuilder,
+)
 from hikari.impl.rest import _HTTP_USER_AGENT
 from PIL import Image
 
@@ -16,7 +22,7 @@ from ..util.server_manager import SERVER_DIR, MCServer
 plugin = arc.GatewayPlugin("start_server")
 
 
-def activity(name: str) -> hikari.Activity:
+def custom_activity(name: str) -> hikari.Activity:
     return hikari.Activity(name=name, type=hikari.ActivityType.CUSTOM)
 
 
@@ -65,31 +71,31 @@ async def update_players_if_different(
 
 @plugin.listen()
 async def startup(event: arc.StartedEvent) -> None:
-    await plugin.client.app.update_presence(activity=activity("😴 The server is offline."))
+    await plugin.client.app.update_presence(activity=custom_activity("😴 The server is offline."))
 
 
 @plugin.include
 @arc.slash_command("start", "Starts the server")
 async def start_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     await ctx.respond("Attempting to start the server...")
-    await ctx.client.app.update_presence(activity=activity("🛠️ The server is starting up..."))
+    await ctx.client.app.update_presence(activity=custom_activity("🛠️ The server is starting up..."))
     response = await server.start()
     await ctx.edit_initial_response(response["msg"])
 
     if response.get("success"):
         await ctx.respond(f"<@{ctx.user.id}>", user_mentions=True)
 
-    await ctx.client.app.update_presence(activity=activity("⚡️ The server is online!"))
+    await ctx.client.app.update_presence(activity=custom_activity("⚡️ The server is online!"))
 
 
 @plugin.include
 @arc.slash_command("stop", "Closes the server")
 async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) -> None:
     await ctx.respond("Attempting to stop the server...")
-    await ctx.client.app.update_presence(activity=activity("🛠️ The server is shutting down..."))
+    await ctx.client.app.update_presence(activity=custom_activity("🛠️ The server is shutting down..."))
     response: str = await server.stop()
     await ctx.edit_initial_response(response)
-    await ctx.client.app.update_presence(activity=activity("😴 The server is offline."))
+    await ctx.client.app.update_presence(activity=custom_activity("😴 The server is offline."))
 
 
 # @plugin.include
@@ -149,7 +155,7 @@ async def get_players(
     num_players = len(players)
 
     if num_players == 0:
-        await ctx.respond(component=(hikari.impl.TextDisplayComponentBuilder(content="No players online.")))
+        await ctx.respond(component=(TextDisplayComponentBuilder(content="No players online.")))
         return
 
     player_batches = [players[:4]]
@@ -160,9 +166,7 @@ async def get_players(
         components: list[hikari.api.ComponentBuilder] = []
         if index == 0:
             components.append(
-                hikari.impl.TextDisplayComponentBuilder(
-                    content=f"# {num_players} player{'s' if num_players > 1 else ''} online:"
-                )
+                TextDisplayComponentBuilder(content=f"# {num_players} player{'s' if num_players > 1 else ''} online:")
             )
         for player in batch:
             components.append(await create_player_component(player, aiohttp_client, user_map.get(player)))
@@ -180,13 +184,10 @@ async def get_players_v2(ctx: arc.GatewayContext, server: MCServer = arc.inject(
             async for row in cursor:
                 await ctx.respond(row)
 
-    
-
-
 
 async def create_player_component(
     username: str, aiohttp_client: aiohttp.ClientSession, id: int | None = None
-) -> hikari.impl.ContainerComponentBuilder:
+) -> ContainerComponentBuilder:
     player_head_url: str = f"https://mc-heads.net/avatar/{username}"
     color_tuple: tuple[int]
     async with aiohttp_client.get(player_head_url) as response:
@@ -196,12 +197,10 @@ async def create_player_component(
         average_color = image_array.mean(axis=(0, 1))
         color_tuple = tuple(average_color.astype(int))
 
-    return hikari.impl.ContainerComponentBuilder(accent_color=hikari.Color.from_rgb(*color_tuple)).add_component(  # type: ignore
-        hikari.impl.SectionComponentBuilder(accessory=hikari.impl.ThumbnailComponentBuilder(media=player_head_url))
-        .add_component(hikari.impl.TextDisplayComponentBuilder(content=f"## {username}"))
-        .add_component(
-            hikari.impl.TextDisplayComponentBuilder(content=f"<@{id}>" if id else "*idk their discord acc lol*")
-        )
+    return ContainerComponentBuilder(accent_color=hikari.Color.from_rgb(*color_tuple)).add_component(  # type: ignore
+        SectionComponentBuilder(accessory=ThumbnailComponentBuilder(media=player_head_url))
+        .add_component(TextDisplayComponentBuilder(content=f"## {username}"))
+        .add_component(TextDisplayComponentBuilder(content=f"<@{id}>" if id else "*idk their discord acc lol*"))
     )
 
 
