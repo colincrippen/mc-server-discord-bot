@@ -224,12 +224,22 @@ async def add_mc_username(
     ctx: arc.GatewayContext, username: arc.Option[str, arc.StrParams("Your minecraft username.")]
 ) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = player_row_factory  # type: ignore
-        await db.execute("UPDATE player_info SET discord_id = NULL WHERE discord_id = ?", (ctx.author.id,))
-        await db.execute("UPDATE player_info SET discord_id = ? WHERE username = ?", (ctx.author.id, username))
-        await db.commit()
+        try:
+            async with db.execute("SELECT username FROM player_info WHERE username = ?", (username,)) as cursor:
+                if not (row := await cursor.fetchone()):
+                    await ctx.respond(
+                        f"Player `{username}` does not exist! Please log on to the server at least once before running this command!"
+                    )
+                    return
 
-    await ctx.respond("Updated username!")
+            await db.execute("UPDATE player_info SET discord_id = NULL WHERE discord_id = ?", (ctx.author.id,))
+            await db.execute("UPDATE player_info SET discord_id = ? WHERE username = ?", (ctx.author.id, username))
+            await db.commit()
+
+            await ctx.respond(f"Updated Minecraft username to `{row[0]}`!")
+        except Exception as _:
+            await db.rollback()
+            await ctx.respond("An error occurred, username is not updated.")
 
 
 @arc.loader
