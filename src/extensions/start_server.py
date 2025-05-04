@@ -136,9 +136,26 @@ async def stop_server(ctx: arc.GatewayContext, server: MCServer = arc.inject()) 
 
 
 @plugin.include
-@arc.slash_command("get_players")
+@arc.slash_command("get-players")
 async def get_players(
-    ctx: arc.GatewayContext, server: MCServer = arc.inject(), aiohttp_client: aiohttp.ClientSession = arc.inject()
+    ctx: arc.GatewayContext,
+    server: MCServer = arc.inject(),
+    aiohttp_client: aiohttp.ClientSession = arc.inject(),
+    sort_by: arc.Option[
+        str,
+        arc.StrParams(
+            "*[Optional]* How to sort the players. Defaults to username ascending.",
+            name="sort",
+            choices={
+                "Username (Ascending)": "ORDER BY username ASC",
+                "Username (Descending)": "ORDER BY username DESC",
+                "Deaths (Ascending)": "ORDER BY deaths ASC, username ASC",
+                "Deaths (Descending)": "ORDER BY deaths DESC, username ASC",
+                "Join Time (Earliest to Latest)": "ORDER BY joined_at ASC, username ASC",
+                "Join Time (Latest to Earliest)": "ORDER BY joined_at DESC, username ASC",
+            },
+        ),
+    ] = "ORDER BY username ASC",
 ):
     if server.state != "running":
         await ctx.respond("The server is offline.")
@@ -147,7 +164,7 @@ async def get_players(
     players: list[Player] = []
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = player_row_factory  # type: ignore
-        async with db.execute("SELECT * FROM player_info WHERE currently_online = 1") as cursor:
+        async with db.execute(f"SELECT * FROM player_info WHERE currently_online = 1 {sort_by}") as cursor:
             async for player in cursor:
                 player = t.cast("Player", player)
                 players.append(player)
@@ -219,7 +236,7 @@ async def create_player_component(aiohttp_client: aiohttp.ClientSession, player:
 
 
 @plugin.include
-@arc.slash_command("add_mc_username")
+@arc.slash_command("add-mc-username")
 async def add_mc_username(
     ctx: arc.GatewayContext, username: arc.Option[str, arc.StrParams("Your minecraft username.")]
 ) -> None:
