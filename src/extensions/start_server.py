@@ -144,7 +144,7 @@ async def get_players(
     sort_by: arc.Option[
         str,
         arc.StrParams(
-            "*[Optional]* How to sort the players. Defaults to username ascending.",
+            "How to sort the players. Defaults to username ascending.",
             name="sort",
             choices={
                 "Username (Ascending)": "ORDER BY username ASC",
