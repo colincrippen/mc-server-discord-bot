@@ -1,3 +1,4 @@
+import colorsys
 import hashlib
 import json
 import os
@@ -20,6 +21,7 @@ from hikari.impl import (
 )
 from hikari.impl.rest import _HTTP_USER_AGENT
 from PIL import Image
+from sklearn.cluster import KMeans
 
 from ..util.server_manager import SERVER_DIR, MCServer
 
@@ -205,11 +207,9 @@ async def create_player_component(aiohttp_client: aiohttp.ClientSession, player:
     new_hash = hashlib.sha256(img_bytes).hexdigest()
 
     if not player.head_color or new_hash != player.head_color_hash:
-        image = Image.open(BytesIO(img_bytes)).convert("RGB")
-        image_array = np.array(image)
-        average_color = image_array.mean(axis=(0, 1))
-        r, g, b = tuple(average_color.astype(int))
-
+        new_head_color = await generate_head_color(aiohttp_client, player_head_url)
+        print(f"Generating new color for {player.username}: {new_head_color}", flush=True)
+        r, g, b = new_head_color
         player.head_color = hex(r * 16**4 + g * 16**2 + b)
 
         async with aiosqlite.connect(DB_PATH) as db:
@@ -233,6 +233,29 @@ async def create_player_component(aiohttp_client: aiohttp.ClientSession, player:
             )
         )
     )
+
+
+async def generate_head_color(aiohttp_client: aiohttp.ClientSession, url: str, k: int = 5) -> tuple[int, int, int]:
+    async with aiohttp_client.get(url) as response:
+        image_bytes = await response.read()
+
+    image = Image.open(BytesIO(image_bytes)).convert("RGB")
+    pixels = np.array(image).reshape(-1, 3)
+
+    kmeans = KMeans(n_clusters=k)
+    kmeans.fit(pixels)
+    colors = kmeans.cluster_centers_.astype(int)
+
+    hsv_colors = [colorsys.rgb_to_hsv(*(color / 255)) for color in colors]
+
+    best_index: int = 0
+    best_color: tuple[float, float, float] = (0, 0, 0)
+    for i, color in enumerate(hsv_colors):
+        if color[1] > best_color[1] and color[2] > 0.18:
+            best_index = i
+            best_color = color
+
+    return tuple(colors[best_index])
 
 
 @plugin.include
